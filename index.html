@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Party Planner</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Responsive grid layout for the main content area */
+        @media (min-width: 1024px) {
+            .lg-main-content { grid-template-columns: minmax(300px, 1fr) 3fr; }
+        }
+        /* Hide scrollbar for a cleaner look */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Modal backdrop for blur effect */
+        .modal-backdrop { backdrop-filter: blur(8px); }
+        .modal-bg.show .modal-card { transform: scale(1); opacity: 1; }
+        .modal-card { transform: scale(0.95); opacity: 0; transition: transform 0.3s ease-out, opacity 0.3s ease-out; }
+    </style>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        window.firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, orderBy, limit };
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <!-- Main Application Container -->
+    <div id="app" class="min-h-screen p-4 sm:p-6 lg:p-8">
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 lg:mb-10">
+            <div class="flex items-center gap-2 mb-4 sm:mb-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-party-popper text-amber-500">
+                    <path d="M5.8 11.3 2 22l10.7-3.88c.84-.3 1.5-.96 1.8-1.8L22 2 11.3 5.8c-.84.3-1.5.96-1.8 1.8L2 22z"/>
+                    <path d="M12 12l4 4"/>
+                    <path d="M14 2c-2.7 0-5 2.2-5 5-2.7 0-5 2.2-5 5 2.7 0 5 2.2 5 5 2.7 0 5-2.2 5-5 2.7 0-5-2.2-5-5z"/>
+                </svg>
+                <h1 class="text-3xl font-bold tracking-tight">Party Planner <span class="text-base font-normal text-slate-500">Updated</span></h1>
+            </div>
+            <div class="flex flex-wrap gap-2 sm:gap-4 w-full sm:w-auto">
+                <button id="btnPlan" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md w-full sm:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus">
+                        <path d="M5 12h14"/><path d="M12 5v14"/>
+                    </svg>
+                    Plan a Party
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Application View -->
+        <main id="main-view" class="grid lg:grid-cols-2 lg-main-content gap-6">
+            <!-- Sidebar / Controls -->
+            <div id="sidebar" class="space-y-6">
+                <!-- My Parties -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">My Parties</h2>
+                        <span id="partyCount" class="text-xs font-medium bg-slate-100 text-slate-500 rounded-full px-2 py-0.5">0 Parties</span>
+                    </div>
+                    <div id="partyList" class="space-y-3">
+                        <div class="text-slate-500 italic text-sm">No parties yet. Start by planning one!</div>
+                    </div>
+                </div>
+
+                <!-- Main Controls -->
+                <div class="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                    <button id="btnContacts" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users-2">
+                            <path d="M14 19a6 6 0 0 0-12 0"/>
+                            <circle cx="8" cy="9" r="4"/>
+                            <path d="M22 19a6 6 0 0 0-6-6h-2"/>
+                            <circle cx="16" cy="9" r="4"/>
+                        </svg>
+                        Manage Contacts
+                    </button>
+                    <button id="toggleCalendar" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar">
+                            <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
+                        </svg>
+                        Show Calendar
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="btnReset" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md flex-1">Reset All</button>
+                        <button id="btnSeed" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm flex-1">Load Sample</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Calendar View (Hidden by default) -->
+            <div id="calendarBlock" class="hidden lg:col-span-2">
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <button id="calPrev" class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-left">
+                                <path d="m15 18-6-6 6-6"/>
+                            </svg>
+                        </button>
+                        <div id="calTitle" class="text-xl font-semibold"></div>
+                        <button id="calNext" class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right">
+                                <path d="m9 18-6-6-6-6"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="calGrid" class="grid grid-cols-7 gap-2 text-center text-sm"></div>
+                </div>
+            </div>
+
+            <!-- Party Details Page (starts hidden) -->
+            <div id="party-details-page" class="hidden lg:col-span-2 space-y-6 w-full"></div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- CONTACTS MODAL -->
+    <div id="contactsModal" class="modal-bg hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-30 modal-backdrop">
+        <div class="modal-card bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-shrink-0 flex justify-between items-center p-4 -mx-4 -mt-4 sm:p-6 sm:-mx-6 sm:-mt-6 mb-4 border-b border-slate-200">
+                <h3 class="text-xl font-semibold">Contacts</h3>
+                <div class="flex items-center gap-2">
+                    <button id="btnHouseholds" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">Households</button>
+                    <button id="btnAddContact" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">Add Contact</button>
+                    <button class="p-1 rounded-full text-slate-500 hover:bg-slate-100 transition-colors" data-close="#contactsModal">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
+                            <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-grow overflow-y-auto hide-scrollbar p-6">
+                <div class="text-sm text-slate-500 mb-4"><span id="contactCount">0</span> total contacts</div>
+                <div id="contactList" class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ADD/EDIT CONTACT MODAL -->
+    <div id="contactFormModal" class="modal-bg hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-30 modal-backdrop">
+        <div class="modal-card bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-shrink-0 flex justify-between items-center p-4 -mx-4 -mt-4 sm:p-6 sm:-mx-6 sm:-mt-6 mb-4 border-b border-slate-200">
+                <h3 id="contactFormTitle" class="text-xl font-semibold">Add Contact</h3>
+                <button class="p-1 rounded-full text-slate-500 hover:bg-slate-100 transition-colors" data-close="#contactFormModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="contactForm" class="flex-grow p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto hide-scrollbar">
+                <input type="hidden" id="cId"/>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Name</label><input id="cName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Full name"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Birthday (optional)</label><input id="cBirthday" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Phone (optional)</label><input id="cPhone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="555-123-4567"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Email (optional)</label><input id="cEmail" type="email" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="name@email.com"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Household</label><select id="cHousehold" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"></select></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">...or new household</label><input id="cHouseholdNew" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="The Johnsons"/></div>
+                <div class="flex gap-2 items-end mt-4 sm:col-span-2">
+                    <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="submit">Save Contact</button>
+                    <button type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm" id="cClear">Clear</button>
+                </div>
+            </form>
+            <div class="p-4 text-xs italic text-slate-500">
+                You can find your `userId` here: <span id="userIdDisplay" class="font-mono"></span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- HOUSEHOLDS MODAL -->
+    <div id="householdsModal" class="modal-bg hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-30 modal-backdrop">
+        <div class="modal-card bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-shrink-0 flex justify-between items-center p-4 -mx-4 -mt-4 sm:p-6 sm:-mx-6 sm:-mt-6 mb-4 border-b border-slate-200">
+                <h3 class="text-xl font-semibold">Households</h3>
+                <button class="p-1 rounded-full text-slate-500 hover:bg-slate-100 transition-colors" data-close="#householdsModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="flex-grow p-6 overflow-y-auto hide-scrollbar">
+                <form id="houseForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div><label class="block text-sm font-medium text-slate-600 mb-1">Household Name</label><input id="hName" placeholder="Garcia Family" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                    <div class="flex gap-2 items-end">
+                        <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="submit">Add Household</button>
+                        <button type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm" id="hClear">Clear</button>
+                    </div>
+                </form>
+                <div class="overflow-x-auto hide-scrollbar">
+                    <table class="w-full table-auto text-sm">
+                        <thead>
+                            <tr class="text-left text-slate-500 font-medium">
+                                <th class="p-2">Household</th>
+                                <th class="p-2">Members</th>
+                                <th class="p-2 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="houseTableBody" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- CREATE PARTY (PLAN) MODAL -->
+    <div id="createPlanModal" class="modal-bg hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-30 modal-backdrop">
+        <div class="modal-card bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-shrink-0 flex justify-between items-center p-4 -mx-4 -mt-4 sm:p-6 sm:-mx-6 sm:-mt-6 mb-4 border-b border-slate-200">
+                <h3 class="text-xl font-semibold">Plan a Party</h3>
+                <button class="p-1 rounded-full text-slate-500 hover:bg-slate-100 transition-colors" data-close="#createPlanModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="partyPlanForm" class="flex-grow p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto hide-scrollbar">
+                <input type="hidden" id="pId"/>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Party Name</label><input id="pTitle" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Alex’s 30th Bash"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Date</label><input id="pDate" type="date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Time (optional)</label><input id="pTime" type="time" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">Location (optional)</label><input id="pLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="123 Main St, Anytown"/></div>
+                <div><label class="block text-sm font-medium text-slate-600 mb-1">For (optional)</label><select id="pFor" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"></select></div>
+                <div class="flex gap-2 items-end mt-4 sm:col-span-2">
+                    <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="submit">Create Party</button>
+                    <button type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm" data-close="#createPlanModal">Cancel</button>
+                </div>
+            </form>
+            <div class="text-sm text-slate-500 p-6 pt-0">
+                Need a new contact? <button class="text-blue-600 hover:text-blue-800 underline transition-colors" id="quickAddFromPlanner">Add one here</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message box container -->
+    <div id="messageBoxContainer" class="fixed top-4 right-4 z-[60] space-y-2"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Initialize Lucide icons
+            lucide.createIcons();
+            
+            // Firebase Globals
+            let db, auth, userId;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+            // Message Box Function
+            function showMessage(message, type = 'info') {
+                const container = document.getElementById('messageBoxContainer');
+                const messageEl = document.createElement('div');
+                messageEl.className = `p-4 rounded-lg shadow-lg text-sm font-medium text-white transition-all duration-300 transform opacity-0 translate-x-full`;
+                
+                let bgColor = 'bg-blue-500';
+                if (type === 'success') bgColor = 'bg-green-500';
+                if (type === 'error') bgColor = 'bg-red-500';
+                
+                messageEl.classList.add(bgColor);
+                messageEl.textContent = message;
+                
+                container.appendChild(messageEl);
+
+                setTimeout(() => {
+                    messageEl.classList.remove('opacity-0', 'translate-x-full');
+                    messageEl.classList.add('opacity-100', 'translate-x-0');
+                }, 10);
+                
+                setTimeout(() => {
+                    messageEl.classList.remove('opacity-100', 'translate-x-0');
+                    messageEl.classList.add('opacity-0', 'translate-x-full');
+                    messageEl.addEventListener('transitionend', () => messageEl.remove());
+                }, 3000);
+            }
+
+            /* ===== Utils & Storage ===== */
+            const $ = s => document.querySelector(s);
+            const $$ = s => Array.from(document.querySelectorAll(s));
+            const uid = () => Math.random().toString(36).slice(2, 10);
+            const fmtMoney = n => `$${(Number(n) || 0).toFixed(2)}`;
+            const parseISO = s => s ? new Date(s + 'T12:00:00') : null;
+            const todayISO = () => new Date().toISOString().slice(0, 10);
+            function hashHue(str) { let h = 0; for (let i = 0; i < str.length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; } return h % 360; }
+            function colorForContact(idOrName) { const key = idOrName || ''; const hue = hashHue(key); return `hsl(${hue} 70% 45%)`; }
+            
+            // Reusable data management object using Firebase Firestore
+            const Data = {
+                // Save an item to a private collection
+                savePrivate: async (collectionName, data) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return []; }
+                    const userRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
+                    try {
+                        const savedDocs = [];
+                        for (const item of Array.isArray(data) ? data : [data]) {
+                            if (item.docId) {
+                                const itemWithoutDocId = { ...item };
+                                delete itemWithoutDocId.docId;
+                                await firebase.setDoc(firebase.doc(userRef, item.docId), itemWithoutDocId, { merge: true });
+                                savedDocs.push({ ...item });
+                            } else {
+                                const newDocRef = await firebase.addDoc(userRef, item);
+                                savedDocs.push({ ...item, docId: newDocRef.id });
+                            }
+                        }
+                        return savedDocs;
+                    } catch (e) {
+                        console.error("Error saving data: ", e);
+                        showMessage("Error saving data.", "error");
+                        return [];
+                    }
+                },
+                // Get all items from a private collection
+                getPrivate: async (collectionName) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return []; }
+                    const userRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
+                    try {
+                        const q = firebase.query(userRef);
+                        const querySnapshot = await firebase.getDocs(q);
+                        const data = [];
+                        querySnapshot.forEach((doc) => {
+                            data.push({ ...doc.data(), docId: doc.id });
+                        });
+                        return data;
+                    } catch (e) {
+                        console.error("Error getting data: ", e);
+                        showMessage("Error fetching data.", "error");
+                        return [];
+                    }
+                },
+                // Delete an item from a private collection
+                deletePrivate: async (collectionName, docId) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return false; }
+                    const userRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
+                    try {
+                        await firebase.deleteDoc(firebase.doc(userRef, docId));
+                        return true;
+                    } catch (e) {
+                        console.error("Error deleting document: ", e);
+                        showMessage("Error deleting document.", "error");
+                        return false;
+                    }
+                },
+                 // Save an item to a public party collection
+                 savePublicParty: async (partyId, data) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return false; }
+                    const partyRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}`);
+                    try {
+                        await firebase.setDoc(partyRef, data, { merge: true });
+                        return true;
+                    } catch (e) {
+                        console.error("Error saving public party: ", e);
+                        showMessage("Error saving public party.", "error");
+                        return false;
+                    }
+                },
+                 // Get a single public party document
+                getPublicParty: async (partyId) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return null; }
+                    const partyRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}`);
+                    try {
+                        const docSnap = await firebase.getDoc(partyRef);
+                        if (docSnap.exists()) {
+                            return { docId: docSnap.id, ...docSnap.data() };
+                        } else {
+                            return null;
+                        }
+                    } catch (e) {
+                        console.error("Error getting public party: ", e);
+                        showMessage("Error fetching public party.", "error");
+                        return null;
+                    }
+                },
+                // Delete an item from a public party collection
+                deletePublicParty: async (partyId) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return false; }
+                    const partyRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}`);
+                    try {
+                        await firebase.deleteDoc(partyRef);
+                        return true;
+                    } catch (e) {
+                        console.error("Error deleting public party: ", e);
+                        showMessage("Error deleting public party.", "error");
+                        return false;
+                    }
+                },
+                 // Add an item to a sub-collection of a public party
+                addPublicSubItem: async (partyId, collectionName, data) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return null; }
+                    const subCollectionRef = firebase.collection(db, `artifacts/${appId}/public/parties/${partyId}/${collectionName}`);
+                    try {
+                        const newDocRef = await firebase.addDoc(subCollectionRef, data);
+                        return { docId: newDocRef.id, ...data };
+                    } catch (e) {
+                        console.error("Error adding sub-item: ", e);
+                        showMessage("Error adding item.", "error");
+                        return null;
+                    }
+                },
+                // Update an item in a sub-collection of a public party
+                updatePublicSubItem: async (partyId, collectionName, docId, data) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return false; }
+                    const docRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}/${collectionName}/${docId}`);
+                    try {
+                        await firebase.setDoc(docRef, data, { merge: true });
+                        return true;
+                    } catch (e) {
+                        console.error("Error updating sub-item: ", e);
+                        showMessage("Error updating item.", "error");
+                        return false;
+                    }
+                },
+                // Delete an item from a sub-collection of a public party
+                deletePublicSubItem: async (partyId, collectionName, docId) => {
+                    if (!db || !userId) { showMessage("App not ready.", "error"); return false; }
+                    const docRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}/${collectionName}/${docId}`);
+                    try {
+                        await firebase.deleteDoc(docRef);
+                        return true;
+                    } catch (e) {
+                        console.error("Error deleting sub-item: ", e);
+                        showMessage("Error deleting item.", "error");
+                        return false;
+                    }
+                }
+            };
+            
+            let state = { contacts: [], households: [], myParties: [], publicParties: {} };
+            let currentPartyId = null;
+
+            // Firebase Initialization & Auth
+            function initFirebase() {
+                if (!firebaseConfig) {
+                    showMessage("Firebase config is missing.", "error");
+                    return;
+                }
+                try {
+                    const app = firebase.initializeApp(firebaseConfig);
+                    auth = firebase.getAuth(app);
+                    db = firebase.getFirestore(app);
+
+                    firebase.onAuthStateChanged(auth, async (user) => {
+                        if (user) {
+                            userId = user.uid;
+                            const userIdEl = $('#userIdDisplay');
+                            if (userIdEl) userIdEl.textContent = userId;
+                            await loadInitialData();
+                            setupRealtimeListeners();
+                            handlePartyShareLink();
+                        } else {
+                            if (initialAuthToken) {
+                                await firebase.signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await firebase.signInAnonymously(auth);
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error("Firebase init error: ", e);
+                    showMessage("Failed to initialize Firebase.", "error");
+                }
+            }
+
+            async function loadInitialData() {
+                if (!db || !userId) return;
+                state.contacts = await Data.getPrivate('contacts');
+                state.households = await Data.getPrivate('households');
+                state.myParties = await Data.getPrivate('parties');
+                renderParties();
+                renderCalendar();
+                // Check if we need to load sample data
+                if (state.contacts.length === 0 && state.households.length === 0 && state.myParties.length === 0) {
+                     loadSampleData();
+                }
+            }
+            
+            function setupRealtimeListeners() {
+                if (!db || !userId) return;
+
+                const contactsRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/contacts`);
+                const partiesRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/parties`);
+                const householdsRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/households`);
+
+                firebase.onSnapshot(contactsRef, (snapshot) => {
+                    state.contacts = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                    renderContacts();
+                    renderHouseholdSelects();
+                    if (currentPartyId) openParty(currentPartyId);
+                });
+                firebase.onSnapshot(partiesRef, (snapshot) => {
+                    state.myParties = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                    renderParties();
+                    renderCalendar();
+                });
+                firebase.onSnapshot(householdsRef, (snapshot) => {
+                    state.households = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                    renderHouseholds();
+                    renderHouseholdSelects();
+                    if (currentPartyId) openParty(currentPartyId);
+                });
+            }
+
+            // Function to handle party share links
+            async function handlePartyShareLink() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const partyId = urlParams.get('party');
+                if (partyId) {
+                    const existing = state.myParties.find(p => p.publicId === partyId);
+                    if (!existing) {
+                        // Check if the public party exists
+                        const publicParty = await Data.getPublicParty(partyId);
+                        if (publicParty) {
+                            const newParty = {
+                                title: publicParty.title,
+                                date: publicParty.date,
+                                time: publicParty.time,
+                                location: publicParty.location,
+                                role: 'attend',
+                                forContactId: null,
+                                publicId: partyId,
+                                attend: { giftPlan: '', notes: '' }
+                            };
+                            await Data.savePrivate('parties', newParty);
+                            showMessage("You've joined a new party!", 'success');
+                        } else {
+                            showMessage("This party link is invalid or the party no longer exists.", 'error');
+                        }
+                    }
+                    // Clear the URL to prevent re-joining on refresh
+                    history.pushState({}, '', window.location.pathname);
+                }
+            }
+
+            /* ===== Date helpers ===== */
+            function safeDateParts(iso) {
+                if (!iso) return null;
+                const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+                if (!m) return null;
+                const y = +m[1], mo = +m[2], d = +m[3];
+                if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+                return { y, mo, d };
+            }
+
+            function ageOnDate(birthISO, refISO) {
+                const b = safeDateParts(birthISO), r = safeDateParts(refISO);
+                if (!b || !r) return null;
+                let a = r.y - b.y;
+                const had = (r.mo > b.mo) || (r.mo === b.mo && r.d >= b.d);
+                if (!had) a--;
+                return a;
+            }
+
+            function daysUntil(iso) {
+                const d = parseISO(iso);
+                if (!d) return null;
+                const today = new Date();
+                const base = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const tgt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                return Math.round((tgt - base) / 86400000);
+            }
+
+            /* ===== Modals ===== */
+            function openModal(sel) {
+                const m = $(sel);
+                if (m) {
+                    m.classList.remove('hidden');
+                    setTimeout(() => m.classList.add('show'), 10);
+                }
+            }
+
+            function closeModal(sel) {
+                const m = $(sel);
+                if (m) {
+                    m.classList.remove('show');
+                    setTimeout(() => m.classList.add('hidden'), 300);
+                }
+            }
+
+            document.body.addEventListener('click', e => {
+                const b = e.target.closest('[data-close]');
+                if (b) closeModal(b.getAttribute('data-close'));
+            });
+
+            $$('.modal-bg').forEach(m => m.addEventListener('click', e => {
+                if (e.target === m) closeModal('#' + m.id);
+            }));
+
+            function goBackToMainView() {
+                currentPartyId = null;
+                $('#party-details-page').innerHTML = '';
+                $('#party-details-page').classList.add('hidden');
+                $('#sidebar').classList.remove('hidden');
+                $('#calendarBlock').classList.add('hidden');
+            }
+
+            /* ===== Contacts & Households ===== */
+            function householdName(id) {
+                return state.households.find(h => h.docId === id)?.name || '—';
+            }
+
+            function renderHouseholdSelects() {
+                const opts = ['<option value="">— None —</option>'].concat(state.households.map(h => `<option value="${h.docId}">${h.name}</option>`)).join('');
+                $('#cHousehold').innerHTML = opts;
+                if ($('#pFor')) $('#pFor').innerHTML = ['<option value="">— Optional —</option>'].concat(state.contacts.map(c => `<option value="${c.docId}">${c.name}</option>`)).join('');
+                if ($('#invContact')) $('#invContact').innerHTML = ['<option value="">— Select —</option>'].concat(state.contacts.map(c => `<option value="${c.docId}">${c.name}</option>`)).join('');
+                if ($('#itAssign')) $('#itAssign').innerHTML = ['<option value="">— Unassigned —</option>'].concat(state.contacts.map(c => `<option value="${c.docId}">${c.name}</option>`)).join('');
+            }
+
+            function renderContacts() {
+                const wrap = $('#contactList');
+                if (!wrap) return;
+                wrap.innerHTML = '';
+                const contacts = state.contacts.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                $('#contactCount').textContent = contacts.length;
+                contacts.forEach(c => {
+                    const age = c.birthday ? ageOnDate(c.birthday, todayISO()) : null;
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-lg shadow-sm border border-slate-200';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-bold text-lg">${c.name}</div>
+                            <div class="flex gap-2">
+                                <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm text-sm" data-edit="${c.docId}">Edit</button>
+                                <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-sm" data-del="${c.docId}">Delete</button>
+                            </div>
+                        </div>
+                        <div class="text-sm text-slate-500 space-y-1">
+                            <div>Household: <span class="text-slate-700">${householdName(c.householdId)}</span></div>
+                            <div>Birthday: <span class="text-slate-700">${c.birthday || '—'}</span></div>
+                            <div>Age: <span class="text-slate-700">${age !== null ? age : '—'}</span></div>
+                        </div>
+                    `;
+                    wrap.appendChild(card);
+                });
+                wrap.onclick = async e => {
+                    const del = e.target.closest('button[data-del]');
+                    const edit = e.target.closest('button[data-edit]');
+                    if (del) {
+                        const id = del.dataset.del;
+                        if (!confirm('Delete this contact?')) return;
+                        await Data.deletePrivate('contacts', id);
+                    }
+                    if (edit) {
+                        const id = edit.dataset.edit;
+                        const c = state.contacts.find(x => x.docId === id);
+                        if (!c) return;
+                        $('#contactFormTitle').textContent = 'Edit Contact';
+                        $('#cId').value = c.docId;
+                        $('#cName').value = c.name;
+                        $('#cBirthday').value = c.birthday || '';
+                        $('#cPhone').value = c.phone || '';
+                        $('#cEmail').value = c.email || '';
+                        $('#cHousehold').value = c.householdId || '';
+                        $('#cHouseholdNew').value = '';
+                        openModal('#contactFormModal');
+                    }
+                };
+            }
+
+            function renderHouseholds() {
+                const tbody = $('#houseTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                state.households.forEach(h => {
+                    const members = state.contacts.filter(c => c.householdId === h.docId).map(c => c.name).join(', ') || '—';
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition-colors';
+                    tr.innerHTML = `
+                        <td class="p-2">${h.name}</td>
+                        <td class="p-2 text-slate-500 text-xs">${members}</td>
+                        <td class="p-2 text-right"><button class="flex items-center justify-center gap-2 px-2 py-0.5 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-xs" data-hdel="${h.docId}">Delete</button></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            $('#householdsModal').addEventListener('click', async e => {
+                const del = e.target.closest('button[data-hdel]');
+                if (!del) return;
+                const id = del.dataset.hdel;
+                const used = state.contacts.some(c => c.householdId === id);
+                if (used) {
+                    showMessage('Remove members from this household first.', 'error');
+                    return;
+                }
+                await Data.deletePrivate('households', id);
+            });
+
+            $('#houseForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                const name = $('#hName').value.trim();
+                if (!name) {
+                    showMessage('Household name required.', 'error');
+                    return;
+                }
+                const newHousehold = { name };
+                await Data.savePrivate('households', [newHousehold]);
+                $('#hName').value = '';
+                showMessage('Household added successfully.', 'success');
+            });
+
+            $('#hClear').addEventListener('click', () => {
+                $('#hName').value = '';
+            });
+
+            $('#contactForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                let householdId = $('#cHousehold').value || null;
+                const newHouseName = $('#cHouseholdNew').value.trim();
+                if (newHouseName) {
+                    let exists = state.households.find(h => h.name.toLowerCase() === newHouseName.toLowerCase());
+                    if (exists) {
+                        householdId = exists.docId;
+                    } else {
+                        const newHousehold = { name: newHouseName };
+                        const savedHousehold = (await Data.savePrivate('households', [newHousehold]))[0];
+                        householdId = savedHousehold.docId;
+                    }
+                }
+                const existingId = $('#cId').value;
+                const contactData = {
+                    name: $('#cName').value.trim(),
+                    birthday: $('#cBirthday').value || null,
+                    phone: $('#cPhone').value.trim(),
+                    email: $('#cEmail').value.trim(),
+                    householdId
+                };
+                if (!contactData.name) {
+                    showMessage('Name is required.', 'error');
+                    return;
+                }
+                if (existingId) {
+                    contactData.docId = existingId;
+                    await Data.savePrivate('contacts', contactData);
+                    showMessage('Contact updated successfully.', 'success');
+                } else {
+                    await Data.savePrivate('contacts', contactData);
+                    showMessage('Contact added successfully.', 'success');
+                }
+                $('#contactForm').reset();
+                $('#cId').value = '';
+                $('#contactFormTitle').textContent = 'Add Contact';
+                closeModal('#contactFormModal');
+            });
+
+            $('#cClear').addEventListener('click', () => {
+                $('#contactForm').reset();
+                $('#cId').value = '';
+                $('#contactFormTitle').textContent = 'Add Contact';
+            });
+
+            /* ===== Parties ===== */
+            function personName(id) {
+                return state.contacts.find(c => c.docId === id)?.name || '—';
+            }
+
+            function personColor(id) {
+                return id ? colorForContact(id) : '#94a3b8';
+            }
+
+            const partyListEl = $('#partyList');
+            function renderParties() {
+                if (!partyListEl) return;
+                partyListEl.innerHTML = '';
+                const parties = state.myParties.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                $('#partyCount').textContent = `${parties.length} Parties`;
+                if (parties.length === 0) {
+                    partyListEl.innerHTML = '<div class="text-slate-500 italic text-sm">No parties yet. Start by planning one!</div>';
+                    return;
+                }
+                parties.forEach(p => {
+                    const name = p.forContactId ? personName(p.forContactId) : '—';
+                    const hue = personColor(p.forContactId || name);
+                    const dLeft = daysUntil(p.date);
+                    const el = document.createElement('div');
+                    el.className = 'bg-white rounded-lg shadow-sm p-4 border-l-4 transition-all duration-200 hover:shadow-md cursor-pointer';
+                    el.style.borderColor = hue;
+                    el.innerHTML = `
+                        <div class="flex justify-between items-center mb-1">
+                            <div class="font-semibold text-slate-800 truncate">${p.title}</div>
+                            <span class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">${p.role === 'host' ? 'Host' : 'Attending'}</span>
+                        </div>
+                        <div class="text-sm text-slate-500">
+                            ${p.date || '—'}
+                            ${dLeft !== null ? (dLeft === 0 ? '<span class="text-green-600 font-medium">🎉 Today</span>' : dLeft > 0 ? `in ${dLeft} day${dLeft === 1 ? '' : 's'}` : `${Math.abs(dLeft)} day${Math.abs(dLeft) === 1 ? '' : 's'} ago`) : '—'}
+                        </div>
+                        <div class="text-sm text-slate-500">
+                            For: <span class="text-slate-700 font-medium">${name}</span>
+                        </div>
+                        <div class="flex gap-2 mt-2">
+                            <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm text-xs" data-open="${p.docId}">Open</button>
+                            <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-xs" data-delete="${p.docId}">Delete</button>
+                        </div>
+                    `;
+                    partyListEl.appendChild(el);
+                });
+            }
+
+            partyListEl.onclick = async (e) => {
+                const openBtn = e.target.closest('button[data-open]');
+                const delBtn = e.target.closest('button[data-delete]');
+                if (openBtn) {
+                    openParty(openBtn.getAttribute('data-open'));
+                }
+                if (delBtn) {
+                    const id = delBtn.getAttribute('data-delete');
+                    if (confirm('Delete this party?')) {
+                        const party = state.myParties.find(p => p.docId === id);
+                        if (party.role === 'host') {
+                           await Data.deletePublicParty(party.publicId);
+                           await Data.deletePrivate('parties', id);
+                           showMessage("Party deleted.", 'success');
+                        } else {
+                           await Data.deletePrivate('parties', id);
+                           showMessage("Party removed from your list.", 'success');
+                        }
+                    }
+                }
+            };
+
+            $('#btnPlan').onclick = () => openModal('#createPlanModal');
+
+            $('#partyPlanForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                const newParty = {
+                    title: $('#pTitle').value.trim(),
+                    date: $('#pDate').value || null,
+                    time: $('#pTime').value || null,
+                    location: $('#pLocation').value.trim() || null,
+                    role: 'host',
+                    forContactId: $('#pFor').value || null,
+                    attend: { giftPlan: '', notes: '' },
+                    invitation: null,
+                    guestCount: 0
+                };
+                if (!newParty.title || !newParty.date) {
+                    showMessage('Party name and date are required.', 'error');
+                    return;
+                }
+                const publicId = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
+                newParty.publicId = publicId;
+                await Data.savePrivate('parties', newParty);
+                await Data.savePublicParty(publicId, {
+                    title: newParty.title,
+                    date: newParty.date,
+                    time: newParty.time,
+                    location: newParty.location,
+                    hostUserId: userId
+                });
+                closeModal('#createPlanModal');
+                showMessage('Party planned successfully!', 'success');
+            });
+
+            $('#quickAddFromPlanner').onclick = () => {
+                openModal('#contactFormModal');
+            };
+
+            /* ===== Party Modal / Details View ===== */
+            function getPartyById(id) {
+                return state.myParties.find(p => p.docId === id);
+            }
+
+            function getPublicPartySnapshot(partyId) {
+                if (!db || !partyId) return;
+                const partyRef = firebase.doc(db, `artifacts/${appId}/public/parties/${partyId}`);
+                firebase.onSnapshot(partyRef, (doc) => {
+                    const data = doc.data();
+                    if (data) {
+                        state.publicParties[partyId] = { docId: doc.id, ...data };
+                    } else {
+                        delete state.publicParties[partyId];
+                        showMessage('The host has deleted this party.', 'info');
+                        // Go back to main view if the current party is deleted
+                        if (currentPartyId && getPartyById(currentPartyId)?.publicId === partyId) {
+                             goBackToMainView();
+                        }
+                    }
+                    if (currentPartyId && getPartyById(currentPartyId)?.publicId === partyId) {
+                        renderPartyDetails(getPartyById(currentPartyId));
+                    }
+                });
+            }
+
+            function getSubCollectionSnapshot(partyId, collectionName, callback) {
+                if (!db || !partyId) return;
+                const ref = firebase.collection(db, `artifacts/${appId}/public/parties/${partyId}/${collectionName}`);
+                firebase.onSnapshot(ref, (snapshot) => {
+                    const data = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                    callback(data);
+                });
+            }
+
+            async function openParty(id) {
+                const myParty = getPartyById(id);
+                if (!myParty) return;
+
+                currentPartyId = id;
+                $('#party-details-page').classList.remove('hidden');
+                $('#sidebar').classList.add('hidden');
+                $('#calendarBlock').classList.add('hidden');
+
+                const publicPartyId = myParty.publicId;
+
+                // Subscribe to real-time updates for the public party document
+                getPublicPartySnapshot(publicPartyId);
+
+                // Setup sub-collection listeners
+                if (myParty.role === 'host') {
+                    getSubCollectionSnapshot(publicPartyId, 'invitees', (data) => { myParty.invitees = data; renderPartyDetails(myParty); });
+                    getSubCollectionSnapshot(publicPartyId, 'items', (data) => { myParty.items = data; renderPartyDetails(myParty); });
+                    getSubCollectionSnapshot(publicPartyId, 'vendors', (data) => { myParty.vendors = data; renderPartyDetails(myParty); });
+                    getSubCollectionSnapshot(publicPartyId, 'messages', (data) => { myParty.messages = data; renderPartyDetails(myParty); });
+                } else { // Attendee role
+                    getSubCollectionSnapshot(publicPartyId, 'items', (data) => { myParty.items = data; renderPartyDetails(myParty); });
+                    getSubCollectionSnapshot(publicPartyId, 'messages', (data) => { myParty.messages = data; renderPartyDetails(myParty); });
+                }
+                 // Initial render with current data
+                renderPartyDetails(myParty);
+            }
+            
+            function renderPartyDetails(myParty) {
+                const publicParty = state.publicParties[myParty.publicId];
+                if (!publicParty) {
+                    $('#party-details-page').innerHTML = `
+                         <div class="bg-white rounded-xl shadow-lg p-6 text-center text-slate-500">
+                             <p>This party has been deleted by the host.</p>
+                             <button id="btnBack" class="mt-4 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                 Go Back
+                             </button>
+                         </div>
+                     `;
+                     $('#btnBack').onclick = goBackToMainView;
+                     return;
+                }
+
+                // Render the main details page
+                $('#party-details-page').innerHTML = `
+                    <div class="bg-white rounded-xl shadow-lg p-6 space-y-6">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                            <button id="btnBack" class="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm mb-4 sm:mb-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+                                Back
+                            </button>
+                            <h3 id="dTitle" class="text-xl font-semibold truncate flex-1 text-center">${publicParty.title}</h3>
+                            <div class="flex items-center gap-2 mt-4 sm:mt-0">
+                                <button id="btnShareParty" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                                    Share
+                                </button>
+                                <button id="btnDeleteParty" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6"/><path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                            <span id="dRole" class="inline-flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-600 rounded-full px-2 py-0.5">${myParty.role.toUpperCase()}</span>
+                            <span id="dDate" class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">${publicParty.date || '—'}</span>
+                            <span id="dTime" class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">Time: ${publicParty.time || '—'}</span>
+                            <span id="dLocation" class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">Location: ${publicParty.location || '—'}</span>
+                            <span id="dFor" class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">For: ${myParty.forContactId ? personName(myParty.forContactId) : '—'}</span>
+                            <span id="dDays" class="inline-flex items-center gap-1 text-xs font-medium bg-slate-100 text-green-700 rounded-full px-2 py-0.5"></span>
+                        </div>
+
+                        ${myParty.role === 'host' ? `
+                        <!-- HOST VIEW -->
+                        <div id="hostBlocks" class="space-y-6">
+                            <!-- Summary -->
+                            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                                <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Estimated Cost<div class="text-lg font-bold" id="summaryCost">$0.00</div></div>
+                                <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Items To Buy<div class="text-lg font-bold" id="summaryItems">0</div></div>
+                                <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Guests Confirmed<div class="text-lg font-bold" id="summaryConfirmed">0</div></div>
+                                <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Adults<div class="text-lg font-bold" id="cntAdults">0</div></div>
+                                <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Kids<div class="text-lg font-bold" id="cntKids">0</div></div>
+                            </div>
+
+                            <!-- Local Weather -->
+                            <div class="bg-white rounded-xl shadow-md p-4">
+                                <div class="flex justify-between items-center cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+                                    <h4 class="text-lg font-semibold text-slate-700">Local Weather Forecast</h4>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                                <div id="weatherContent" class="mt-2 text-sm text-slate-600">
+                                    <p>Click below to load the weather forecast.</p>
+                                    <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md mt-2" id="btnLoadWeather">Load Weather</button>
+                                </div>
+                            </div>
+
+                            <!-- Sections -->
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <div class="flex justify-between items-center cursor-pointer" data-collapse="invitees">
+                                    <h4 class="text-lg font-semibold text-slate-700">Guests & Invitees</h4>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                                <div id="invitees-content">
+                                    <div class="flex flex-wrap gap-2 text-sm">
+                                        <div class="text-slate-500">Expected Guests:</div>
+                                        <input id="guestCount" type="number" min="0" class="w-24 h-8 text-center px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/>
+                                    </div>
+                                    <form id="inviteePicker" class="flex flex-wrap items-end gap-2 mt-4">
+                                        <div class="flex-1 min-w-[150px]">
+                                            <label class="block text-sm font-medium text-slate-600 mb-1">Pick a contact</label>
+                                            <select id="invContact" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"></select>
+                                        </div>
+                                        <button id="btnAddInvitee" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="button">Add</button>
+                                        <button id="btnOpenContactModal" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm" type="button">New Contact</button>
+                                    </form>
+                                    <div class="overflow-x-auto hide-scrollbar mt-4">
+                                        <table class="w-full table-auto text-sm">
+                                            <thead>
+                                                <tr class="text-left text-slate-500 font-medium">
+                                                    <th class="p-2">Name</th>
+                                                    <th class="p-2">Age</th>
+                                                    <th class="p-2">Status</th>
+                                                    <th class="p-2">Gift</th>
+                                                    <th class="p-2">Thank You</th>
+                                                    <th class="p-2 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="inviteeTableBody" class="divide-y divide-slate-200"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <div class="flex justify-between items-center cursor-pointer" data-collapse="shopping-list">
+                                    <h4 class="text-lg font-semibold text-slate-700">Shopping List & Assignments</h4>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                                <div id="shopping-list-content">
+                                    <form id="itemForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Item</label><input id="itName" placeholder="Cake, plates…" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Qty</label><input id="itQty" type="number" min="1" value="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Cost (each)</label><input id="itCost" type="number" min="0" step="0.01" value="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Assign to</label><select id="itAssign" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"></select></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Status</label><select id="itStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"><option value="todo">To buy</option><option value="ordered">Ordered</option><option value="picked">Picked up</option></select></div>
+                                        <div class="flex gap-2">
+                                            <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md flex-1" type="submit">Add Item</button>
+                                            <button type="button" id="btnClearItem" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm flex-1">Clear</button>
+                                        </div>
+                                    </form>
+                                    <div class="overflow-x-auto hide-scrollbar mt-4">
+                                        <table class="w-full table-auto text-sm">
+                                            <thead>
+                                                <tr class="text-left text-slate-500 font-medium">
+                                                    <th class="p-2">Item</th>
+                                                    <th class="p-2">Assigned</th>
+                                                    <th class="p-2">Qty</th>
+                                                    <th class="p-2">Cost</th>
+                                                    <th class="p-2">Status</th>
+                                                    <th class="p-2 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="itemTableBody" class="divide-y divide-slate-200"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <div class="flex justify-between items-center cursor-pointer" data-collapse="vendors">
+                                    <h4 class="text-lg font-semibold text-slate-700">Vendors</h4>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                                <div id="vendors-content" class="hidden">
+                                    <form id="vendorForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Name</label><input id="vName" placeholder="Sweet Tooth Cakes" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Type</label><input id="vType" placeholder="Bakery / Venue / DJ" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Phone</label><input id="vPhone" placeholder="555-987-6543" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Email</label><input id="vEmail" type="email" placeholder="hello@vendor.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Website</label><input id="vSite" placeholder="https://…" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div><label class="block text-sm font-medium text-slate-600 mb-1">Notes</label><input id="vNotes" placeholder="Pickup at 3pm" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                        <div class="flex gap-2">
+                                            <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md flex-1" type="submit">Add Vendor</button>
+                                            <button type="button" id="btnClearVendor" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm flex-1">Clear</button>
+                                        </div>
+                                    </form>
+                                    <div class="overflow-x-auto hide-scrollbar mt-4">
+                                        <table class="w-full table-auto text-sm">
+                                            <thead>
+                                                <tr class="text-left text-slate-500 font-medium">
+                                                    <th class="p-2">Vendor</th>
+                                                    <th class="p-2">Type</th>
+                                                    <th class="p-2">Contact</th>
+                                                    <th class="p-2">Notes</th>
+                                                    <th class="p-2 text-right">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="vendorTableBody" class="divide-y divide-slate-200"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <div class="flex justify-between items-center cursor-pointer" data-collapse="invitation">
+                                    <h4 class="text-lg font-semibold text-slate-700">Invitation</h4>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-down text-slate-500"><path d="m6 9 6 6 6-6"/></svg>
+                                </div>
+                                <div id="invitation-content" class="hidden">
+                                    <div class="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                                        <input id="invFile" type="file" accept="image/*,application/pdf" class="hidden"/>
+                                        <label for="invFile" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm cursor-pointer">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>
+                                            </svg>
+                                            Upload
+                                        </label>
+                                        <span class="flex-1 text-sm text-slate-500 truncate" id="invMeta">No invitation uploaded yet.</span>
+                                        <button id="btnInvDownload" type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm hidden">Download</button>
+                                        <button id="btnInvRemove" type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md hidden">Remove</button>
+                                    </div>
+                                    <div id="invPreviewWrap" class="hidden mt-2">
+                                        <div id="invPreview" class="border border-slate-200 rounded-lg p-2 bg-slate-100 flex justify-center items-center"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <h4 class="text-lg font-semibold text-slate-700">Chat</h4>
+                                <div id="chatHistory" class="space-y-4 h-64 overflow-y-auto hide-scrollbar border border-slate-200 p-4 rounded-lg"></div>
+                                <form id="chatForm" class="flex items-center gap-2">
+                                    <input id="chatInput" type="text" placeholder="Type a message..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/>
+                                    <button class="flex items-center justify-center px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md">Send</button>
+                                </form>
+                            </div>
+                        </div>` : `
+                        <!-- ATTENDEE VIEW -->
+                        <div id="attendBlocks" class="space-y-6">
+                             <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <h4 class="text-lg font-semibold text-slate-700">Attending Details</h4>
+                                <div><label class="block text-sm font-medium text-slate-600 mb-1">Gift I plan to bring</label><input id="aGiftPlanEdit" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Gift idea…"/></div>
+                                <div><label class="block text-sm font-medium text-slate-600 mb-1">Notes (what to bring / reminders)</label><textarea id="aNotesEdit" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Snacks? Cooler? Ride?"></textarea></div>
+                                <button id="btnSaveAttendModal" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="button">Save Changes</button>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <h4 class="text-lg font-semibold text-slate-700">Your Assigned Tasks</h4>
+                                <div id="attendeeTasks" class="space-y-2">
+                                    <div class="text-sm text-slate-500">No tasks assigned to you.</div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <h4 class="text-lg font-semibold text-slate-700">Chat</h4>
+                                <div id="chatHistory" class="space-y-4 h-64 overflow-y-auto hide-scrollbar border border-slate-200 p-4 rounded-lg"></div>
+                                <form id="chatForm" class="flex items-center gap-2">
+                                    <input id="chatInput" type="text" placeholder="Type a message..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/>
+                                    <button class="flex items-center justify-center px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md">Send</button>
+                                </form>
+                            </div>
+                        </div>
+                        `}
+
+                    </div>
+                `;
+
+                // Update dynamic values
+                const dLeft = daysUntil(publicParty.date);
+                $('#dDays').textContent = dLeft !== null ? (dLeft === 0 ? 'Today 🎉' : dLeft > 0 ? `in ${dLeft} day${dLeft === 1 ? '' : 's'}` : `${Math.abs(dLeft)} day${Math.abs(dLeft) === 1 ? '' : 's'} ago`) : '—';
+                
+                // Attach event listeners
+                $('#btnBack').onclick = goBackToMainView;
+                $('#btnDeleteParty').onclick = async () => {
+                    if (!myParty) return;
+                    if (confirm('Delete this party?')) {
+                        if (myParty.role === 'host') {
+                            await Data.deletePublicParty(myParty.publicId);
+                            await Data.deletePrivate('parties', myParty.docId);
+                        } else {
+                            await Data.deletePrivate('parties', myParty.docId);
+                        }
+                        goBackToMainView();
+                    }
+                };
+                $('#btnShareParty').onclick = () => {
+                    const partyLink = `${window.location.origin}${window.location.pathname}?party=${myParty.publicId}`;
+                    navigator.clipboard.writeText(partyLink).then(() => {
+                        showMessage('Party link copied to clipboard!', 'success');
+                    }).catch(err => {
+                        console.error('Could not copy text: ', err);
+                        showMessage('Failed to copy link.', 'error');
+                    });
+                };
+                
+                if (myParty.role === 'host') {
+                     // Host-specific listeners and rendering
+                    $('#guestCount').value = myParty.guestCount || (myParty.invitees?.length || 0);
+                    renderInvitees(myParty.invitees, myParty.publicId);
+                    renderItems(myParty.items, myParty.publicId);
+                    renderVendors(myParty.vendors, myParty.publicId);
+                    renderInvitation(myParty.invitation, myParty.docId);
+                    updateCountsAndLists(myParty);
+                    renderChat(myParty.messages, myParty.publicId);
+
+                    $('#btnLoadWeather').onclick = async () => {
+                        const weatherContent = $('#weatherContent');
+                        weatherContent.innerHTML = `<p>Loading weather data...</p>`;
+                        const location = publicParty.location;
+                        if (!location) {
+                            weatherContent.innerHTML = `<p class="text-red-500">Please add a location to the party to get a forecast.</p>`;
+                            return;
+                        }
+
+                        // Use a public weather API (e.g., OpenWeatherMap) with a placeholder key
+                        const apiKey = 'YOUR_OPENWEATHERMAP_API_KEY'; // Replace with a real key
+                        if (apiKey === 'YOUR_OPENWEATHERMAP_API_KEY') {
+                             weatherContent.innerHTML = `<p class="text-red-500">Weather API key is not configured. Please add your key to the code.</p>`;
+                             return;
+                        }
+
+                        try {
+                            const geocodeUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(location)}&limit=1&appid=${apiKey}`;
+                            const geocodeRes = await fetch(geocodeUrl);
+                            const geocodeData = await geocodeRes.json();
+                            if (geocodeData.length === 0) {
+                                throw new Error('Location not found.');
+                            }
+                            const { lat, lon } = geocodeData[0];
+                            const weatherUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`;
+                            const weatherRes = await fetch(weatherUrl);
+                            const weatherData = await weatherRes.json();
+                            const forecastDate = publicParty.date;
+                            if (weatherData.list) {
+                                const forecast = weatherData.list.find(item => item.dt_txt.startsWith(forecastDate));
+                                if (forecast) {
+                                    weatherContent.innerHTML = `
+                                        <div class="space-y-2 mt-2">
+                                            <p>Forecast for ${forecastDate}:</p>
+                                            <p>Temp: ${forecast.main.temp}°F</p>
+                                            <p>Condition: ${forecast.weather[0].description}</p>
+                                        </div>
+                                    `;
+                                } else {
+                                    weatherContent.innerHTML = `<p>No forecast available for that date.</p>`;
+                                }
+                            } else {
+                                throw new Error('Weather data not available.');
+                            }
+                        } catch (e) {
+                            console.error('Weather fetch error:', e);
+                            weatherContent.innerHTML = `<p class="text-red-500">Failed to fetch weather data: ${e.message}</p>`;
+                        }
+                    };
+
+                } else { // Attendee-specific listeners and rendering
+                    $('#aGiftPlanEdit').value = myParty.attend?.giftPlan || '';
+                    $('#aNotesEdit').value = myParty.attend?.notes || '';
+                    renderAttendeeTasks(myParty.items);
+                    renderChat(myParty.messages, myParty.publicId);
+
+                    $('#btnSaveAttendModal').onclick = async () => {
+                        myParty.attend = { giftPlan: $('#aGiftPlanEdit').value.trim(), notes: $('#aNotesEdit').value.trim() };
+                        await Data.savePrivate('parties', myParty);
+                        showMessage('Saved changes successfully.', 'success');
+                    };
+                }
+
+                // Attach general listeners for dynamic content
+                document.getElementById('party-details-page').addEventListener('click', e => {
+                    const collapseHeader = e.target.closest('[data-collapse]');
+                    if (collapseHeader) {
+                        const contentId = collapseHeader.dataset.collapse + '-content';
+                        const content = document.getElementById(contentId);
+                        if (content) {
+                            content.classList.toggle('hidden');
+                            const icon = collapseHeader.querySelector('svg');
+                            if (content.classList.contains('hidden')) {
+                                icon.style.transform = 'rotate(0deg)';
+                            } else {
+                                icon.style.transform = 'rotate(180deg)';
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Party details - HOST
+            function updateCountsAndLists(myParty) {
+                const confirmed = (myParty.invitees || []).filter(i => i.status === 'rsvp');
+                const itemsToBuy = (myParty.items || []).filter(i => i.status !== 'picked').length;
+                const estimatedCost = (myParty.items || []).reduce((s, it) => s + (Number(it.cost) || 0) * (Number(it.qty) || 1), 0);
+                $('#summaryCost').textContent = fmtMoney(estimatedCost);
+                $('#summaryItems').textContent = itemsToBuy;
+                $('#summaryConfirmed').textContent = confirmed.length;
+
+                const confirmedKids = confirmed.filter(i => calcAgeBucket(i.contactId, myParty.publicParty.date).bucket === 'kid').length;
+                const confirmedAdults = confirmed.filter(i => calcAgeBucket(i.contactId, myParty.publicParty.date).bucket === 'adult').length;
+
+                $('#cntKids').textContent = confirmedKids;
+                $('#cntAdults').textContent = confirmedAdults;
+            }
+
+            function calcAgeBucket(contactId, partyDateISO) {
+                const birth = state.contacts.find(c => c.docId === contactId)?.birthday || null;
+                if (!birth) return { bucket: 'unknown', age: null };
+                const a = ageOnDate(birth, partyDateISO);
+                if (a == null) return { bucket: 'unknown', age: null };
+                return a < 18 ? { bucket: 'kid', age: a } : { bucket: 'adult', age: a };
+            }
+
+            function renderInvitees(invitees, publicPartyId) {
+                const tbody = $('#inviteeTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                (invitees || []).forEach((i, idx) => {
+                    const c = state.contacts.find(c => c.docId === i.contactId);
+                    const age = c?.birthday ? ageOnDate(c.birthday, state.publicParties[publicPartyId]?.date) : null;
+                    const statusColors = { invited: 'bg-slate-600 text-white', rsvp: 'bg-green-600 text-white', declined: 'bg-red-600 text-white' };
+                    const statusBgColors = { invited: 'bg-slate-200 text-slate-600', rsvp: 'bg-green-200 text-green-600', declined: 'bg-red-200 text-red-600' };
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition-colors';
+                    tr.innerHTML = `
+                        <td class="p-2">${c ? c.name : '(Unknown)'}</td>
+                        <td class="p-2">${age == null ? '—' : age}</td>
+                        <td class="p-2">
+                             <div class="flex items-center gap-1">
+                                <button data-action="set-status" data-status="invited" data-id="${i.docId}" class="text-xs px-2 py-1 rounded-full ${i.status === 'invited' ? statusColors.invited : statusBgColors.invited}">Invited</button>
+                                <button data-action="set-status" data-status="rsvp" data-id="${i.docId}" class="text-xs px-2 py-1 rounded-full ${i.status === 'rsvp' ? statusColors.rsvp : statusBgColors.rsvp}">RSVP'd</button>
+                                <button data-action="set-status" data-status="declined" data-id="${i.docId}" class="text-xs px-2 py-1 rounded-full ${i.status === 'declined' ? statusColors.declined : statusBgColors.declined}">Declined</button>
+                             </div>
+                        </td>
+                        <td class="p-2">
+                            <input type="text" data-action="update-gift" data-id="${i.docId}" value="${i.gift || ''}" placeholder="Gift…" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-xs h-8"/>
+                        </td>
+                        <td class="p-2 text-center">
+                            <input type="checkbox" data-action="update-thanks" data-id="${i.docId}" ${i.thankYou ? 'checked' : ''} class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"/>
+                        </td>
+                        <td class="p-2 text-right flex gap-1 justify-end">
+                            <button data-action="remove" data-id="${i.docId}" class="flex items-center justify-center gap-2 px-2 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-xs">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2">
+                                    <path d="M3 6h18"/><path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6"/><path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
+                                </svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                tbody.addEventListener('click', async e => {
+                    const btn = e.target.closest('[data-action]');
+                    if (!btn || btn.dataset.action === 'remove' && !confirm('Delete this invitee?')) return;
+                    const { action, id, status } = btn.dataset;
+                    if (action === 'set-status') {
+                        await Data.updatePublicSubItem(publicPartyId, 'invitees', id, { status });
+                    } else if (action === 'remove') {
+                        await Data.deletePublicSubItem(publicPartyId, 'invitees', id);
+                    }
+                });
+                 tbody.addEventListener('input', async e => {
+                     const input = e.target.closest('[data-action]');
+                     if (!input) return;
+                     const { action, id } = input.dataset;
+                     const value = input.type === 'checkbox' ? input.checked : input.value;
+                     if (action === 'update-gift') {
+                         await Data.updatePublicSubItem(publicPartyId, 'invitees', id, { gift: value });
+                     } else if (action === 'update-thanks') {
+                         await Data.updatePublicSubItem(publicPartyId, 'invitees', id, { thankYou: value });
+                     }
+                 });
+            }
+
+            $('#inviteePicker').addEventListener('submit', async e => {
+                e.preventDefault();
+                const myParty = getPartyById(currentPartyId);
+                const invId = $('#invContact').value;
+                if (!myParty || !invId) return;
+                const existing = myParty.invitees.find(i => i.contactId === invId);
+                if (existing) { showMessage("Contact already invited.", "error"); return; }
+                const invitee = { contactId: invId, status: 'invited', gift: '', thankYou: false };
+                await Data.addPublicSubItem(myParty.publicId, 'invitees', invitee);
+                showMessage("Invitee added.", "success");
+            });
+
+            $('#guestCount').addEventListener('change', async e => {
+                const myParty = getPartyById(currentPartyId);
+                if (!myParty) return;
+                await Data.savePublicParty(myParty.publicId, { guestCount: Number(e.target.value) });
+            });
+            
+            // Party details - ITEMS
+            function statusBadge(s) {
+                const colors = {
+                    'picked': 'bg-green-100 text-green-600',
+                    'ordered': 'bg-blue-100 text-blue-600',
+                    'todo': 'bg-slate-100 text-slate-600'
+                };
+                return `<span class="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 ${colors[s]}">${s.toUpperCase().replace('-', ' ')}</span>`;
+            }
+
+            function findContactNameById(id) {
+                return state.contacts.find(c => c.docId === id)?.name;
+            }
+
+            function renderItems(items, publicPartyId) {
+                const tbody = $('#itemTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                (items || []).forEach((it) => {
+                    const assignee = it.assignedTo ? (findContactNameById(it.assignedTo) || '—') : '—';
+                    const line = (Number(it.cost) || 0) * (Number(it.qty) || 1);
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition-colors';
+                    tr.innerHTML = `
+                        <td class="p-2">${it.name}</td>
+                        <td class="p-2 text-slate-500">${assignee}</td>
+                        <td class="p-2">${it.qty || 1}</td>
+                        <td class="p-2">${fmtMoney(line)}</td>
+                        <td class="p-2">${statusBadge(it.status)}</td>
+                        <td class="p-2 text-right flex gap-1 justify-end">
+                            <button data-action="toggle-status" data-id="${it.docId}" class="flex items-center justify-center gap-2 px-2 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm text-xs">Next</button>
+                            <button data-action="remove" data-id="${it.docId}" class="flex items-center justify-center gap-2 px-2 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-xs">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2">
+                                    <path d="M3 6h18"/><path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6"/><path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
+                                </svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            $('#itemForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                const myParty = getPartyById(currentPartyId);
+                if (!myParty) return;
+                const it = {
+                    name: $('#itName').value.trim(),
+                    qty: Number($('#itQty').value) || 1,
+                    cost: Number($('#itCost').value) || 0,
+                    assignedTo: $('#itAssign').value || null,
+                    status: $('#itStatus').value
+                };
+                if (!it.name) { showMessage('Item name required.', 'error'); return; }
+                await Data.addPublicSubItem(myParty.publicId, 'items', it);
+                e.target.reset();
+                showMessage('Item added successfully.', 'success');
+            });
+
+            $('#btnClearItem').onclick = () => $('#itemForm').reset();
+            
+            document.addEventListener('click', async e => {
+                const btn = e.target.closest('button[data-action][data-id]');
+                if (!btn) return;
+                const myParty = getPartyById(currentPartyId);
+                if (!myParty) return;
+                const { action, id } = btn.dataset;
+                if (action === 'toggle-status') {
+                    const item = myParty.items.find(i => i.docId === id);
+                    if (!item) return;
+                    const newStatus = item.status === 'todo' ? 'ordered' : item.status === 'ordered' ? 'picked' : 'todo';
+                    await Data.updatePublicSubItem(myParty.publicId, 'items', id, { status: newStatus });
+                } else if (action === 'remove' && confirm('Delete this item?')) {
+                    await Data.deletePublicSubItem(myParty.publicId, 'items', id);
+                }
+            });
+
+            // Party details - VENDORS
+            function renderVendors(vendors, publicPartyId) {
+                const tbody = $('#vendorTableBody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                (vendors || []).forEach((v) => {
+                    const contact = [v.phone ? `📞 ${v.phone}` : '', v.email ? `✉️ ${v.email}` : '', v.site ? `🔗 ${v.site}` : ''].filter(Boolean).join(' · ') || '—';
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition-colors';
+                    tr.innerHTML = `
+                        <td class="p-2">${v.name}</td>
+                        <td class="p-2 text-slate-500">${v.type || '—'}</td>
+                        <td class="p-2 text-slate-500 text-xs">${contact}</td>
+                        <td class="p-2 text-slate-500 text-xs">${v.notes || '—'}</td>
+                        <td class="p-2 text-right flex gap-1 justify-end">
+                            <button data-action="remove-vendor" data-id="${v.docId}" class="flex items-center justify-center gap-2 px-2 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-xs">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2">
+                                    <path d="M3 6h18"/><path d="M19 6v14c0 1.1-.9 2-2 2H7c-1.1 0-2-.9-2-2V6"/><path d="M8 6V4c0-1.1.9-2 2-2h4c1.1 0 2 .9 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>
+                                </svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+            $('#vendorForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                const myParty = getPartyById(currentPartyId);
+                if (!myParty) return;
+                const v = {
+                    name: $('#vName').value.trim(),
+                    type: $('#vType').value.trim(),
+                    phone: $('#vPhone').value.trim(),
+                    email: $('#vEmail').value.trim(),
+                    site: $('#vSite').value.trim(),
+                    notes: $('#vNotes').value.trim()
+                };
+                if (!v.name) { showMessage('Vendor name required.', 'error'); return; }
+                await Data.addPublicSubItem(myParty.publicId, 'vendors', v);
+                e.target.reset();
+                showMessage('Vendor added successfully.', 'success');
+            });
+            $('#btnClearVendor').onclick = () => $('#vendorForm').reset();
+            
+            document.addEventListener('click', async e => {
+                const btn = e.target.closest('button[data-action="remove-vendor"]');
+                if (!btn || !confirm('Delete this vendor?')) return;
+                const myParty = getPartyById(currentPartyId);
+                if (!myParty) return;
+                await Data.deletePublicSubItem(myParty.publicId, 'vendors', btn.dataset.id);
+            });
+
+            // Party details - INVITATION
+            async function fileToDataURL(file) {
+                return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+            }
+
+            function renderInvitation(invitation) {
+                const invMeta = $('#invMeta'), invPreviewWrap = $('#invPreviewWrap'), invPreview = $('#invPreview');
+                const btnInvDownload = $('#btnInvDownload'), btnInvRemove = $('#btnInvRemove');
+                if (!invMeta || !invPreviewWrap || !invPreview) return;
+                
+                invMeta.textContent = 'No invitation uploaded yet.';
+                invPreviewWrap.classList.add('hidden');
+                invPreview.innerHTML = '';
+                if (btnInvDownload) btnInvDownload.classList.add('hidden');
+                if (btnInvRemove) btnInvRemove.classList.add('hidden');
+
+                if (invitation) {
+                    invMeta.textContent = `${invitation.name || 'invitation'} • ${invitation.type || ''} • ${(invitation.size / 1024 / 1024).toFixed(2)} MB`;
+                    invPreviewWrap.classList.remove('hidden');
+                    if (btnInvDownload) btnInvDownload.classList.remove('hidden');
+                    if (btnInvRemove) btnInvRemove.classList.remove('hidden');
+                    if (invitation.type && invitation.type.startsWith('image/')) {
+                        const img = new Image();
+                        img.src = invitation.dataURL;
+                        img.className = 'w-full h-auto rounded-lg';
+                        invPreview.appendChild(img);
+                    } else if (invitation.type === 'application/pdf') {
+                        const iframe = document.createElement('iframe');
+                        iframe.src = invitation.dataURL;
+                        iframe.className = 'w-full h-96 rounded-lg';
+                        invPreview.appendChild(iframe);
+                    } else {
+                        invPreview.innerHTML = `<p class="text-slate-500">File type preview not available.</p>`;
+                    }
+                }
+            }
+             
+            $('#party-details-page').addEventListener('change', async e => {
+                 const invFile = e.target.closest('#invFile');
+                 if (!invFile) return;
+                 const myParty = getPartyById(currentPartyId);
+                 if (!myParty) return;
+                 const f = invFile.files?.[0];
+                 if (!f) return;
+                 if (f.size > 8 * 1024 * 1024 && !confirm('This file is larger than 8 MB and may exceed browser storage quotas. Continue?')) {
+                     invFile.value = '';
+                     return;
+                 }
+                 const invitation = { name: f.name, type: f.type || '', size: f.size || 0, uploadedAt: new Date().toISOString(), dataURL: await fileToDataURL(f) };
+                 await Data.savePrivate('parties', { docId: myParty.docId, invitation: invitation });
+                 showMessage('Invitation uploaded successfully!', 'success');
+             });
+             
+             $('#party-details-page').addEventListener('click', async e => {
+                 const btn = e.target.closest('button');
+                 if (!btn) return;
+                 const myParty = getPartyById(currentPartyId);
+                 if (!myParty) return;
+                 if (btn.id === 'btnInvRemove') {
+                     if (!myParty.invitation || !confirm('Remove invitation?')) return;
+                     await Data.savePrivate('parties', { docId: myParty.docId, invitation: null });
+                     showMessage('Invitation removed.', 'success');
+                 } else if (btn.id === 'btnInvDownload') {
+                     if (!myParty.invitation) {
+                         showMessage('No invitation to download.', 'info');
+                         return;
+                     }
+                     const a = document.createElement('a');
+                     a.href = myParty.invitation.dataURL;
+                     a.download = myParty.invitation.name || 'invitation';
+                     a.click();
+                 }
+             });
+
+             // Attendee View
+             function renderAttendeeTasks(items) {
+                 const container = $('#attendeeTasks');
+                 if (!container) return;
+                 const myAssignedItems = items.filter(i => i.assignedTo === state.contacts.find(c => c.name === userId)?.docId); // This needs a proper way to identify the current user's contact ID
+                 if (myAssignedItems.length === 0) {
+                     container.innerHTML = `<div class="text-sm text-slate-500">No tasks assigned to you.</div>`;
+                     return;
+                 }
+                 container.innerHTML = myAssignedItems.map(item => `
+                    <div class="flex items-center gap-2 p-2 bg-slate-100 rounded-lg">
+                        <input type="checkbox" data-action="toggle-attendee-item" data-id="${item.docId}" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" ${item.status === 'picked' ? 'checked' : ''}>
+                        <span class="flex-1 text-sm ${item.status === 'picked' ? 'line-through text-slate-400' : ''}">${item.name} (Qty: ${item.qty})</span>
+                        ${statusBadge(item.status)}
+                    </div>
+                 `).join('');
+                 container.addEventListener('change', async e => {
+                    const cb = e.target.closest('[data-action="toggle-attendee-item"]');
+                    if (!cb) return;
+                    const myParty = getPartyById(currentPartyId);
+                    if (!myParty) return;
+                    const item = myParty.items.find(i => i.docId === cb.dataset.id);
+                    if (!item) return;
+                    const newStatus = cb.checked ? 'picked' : 'todo';
+                    await Data.updatePublicSubItem(myParty.publicId, 'items', item.docId, { status: newStatus });
+                 });
+             }
+
+            // Chat Functionality
+            function renderChat(messages) {
+                const chatHistory = $('#chatHistory');
+                if (!chatHistory) return;
+                chatHistory.innerHTML = '';
+                const sortedMessages = (messages || []).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                sortedMessages.forEach(msg => {
+                    const isMe = msg.userId === userId;
+                    const msgEl = document.createElement('div');
+                    msgEl.className = `p-3 rounded-lg max-w-[80%] ${isMe ? 'bg-blue-500 text-white ml-auto' : 'bg-slate-200 text-slate-800'}`;
+                    msgEl.innerHTML = `<div class="font-semibold text-xs mb-1">${isMe ? 'You' : msg.userName}</div><div>${msg.text}</div>`;
+                    chatHistory.appendChild(msgEl);
+                });
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+
+            $('#party-details-page').addEventListener('submit', async e => {
+                 if (e.target.id !== 'chatForm') return;
+                 e.preventDefault();
+                 const myParty = getPartyById(currentPartyId);
+                 const chatInput = $('#chatInput');
+                 const text = chatInput.value.trim();
+                 if (!myParty || !text) return;
+
+                 const myContact = state.contacts.find(c => c.docId === myParty.forContactId);
+                 const message = {
+                     text,
+                     userId: userId,
+                     userName: myContact ? myContact.name : "Guest",
+                     timestamp: new Date().toISOString()
+                 };
+                 await Data.addPublicSubItem(myParty.publicId, 'messages', message);
+                 chatInput.value = '';
+            });
+
+            /* ===== Calendar ===== */
+            let calRef = new Date();
+            function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+            function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+
+            function renderCalendar() {
+                const grid = $('#calGrid');
+                if (!grid) return;
+                grid.innerHTML = '<div class="font-bold text-slate-500">Sun</div><div class="font-bold text-slate-500">Mon</div><div class="font-bold text-slate-500">Tue</div><div class="font-bold text-slate-500">Wed</div><div class="font-bold text-slate-500">Thu</div><div class="font-bold text-slate-500">Fri</div><div class="font-bold text-slate-500">Sat</div>';
+                const monthStart = startOfMonth(calRef), monthEnd = endOfMonth(calRef);
+                $('#calTitle').textContent = monthStart.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+                const startDow = (monthStart.getDay() + 7) % 7, totalDays = monthEnd.getDate();
+
+                for (let i = 0; i < startDow; i++) {
+                    const pad = document.createElement('div');
+                    grid.appendChild(pad);
+                }
+
+                for (let day = 1; day <= totalDays; day++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'rounded-md p-2 bg-slate-50 border border-slate-200 text-slate-800 text-left cursor-pointer hover:bg-slate-100 transition-colors shadow-sm';
+                    const d = new Date(calRef.getFullYear(), calRef.getMonth(), day);
+                    const iso = d.toISOString().slice(0, 10);
+                    const partiesOnDay = state.myParties.filter(p => p.date === iso);
+                    cell.innerHTML = `
+                        <div class="text-xs font-semibold mb-1">${day}</div>
+                        ${partiesOnDay.map(p => {
+                            const name = p.forContactId ? personName(p.forContactId) : '—';
+                            const hue = personColor(p.forContactId || name);
+                            return `<div class="flex items-center gap-1 text-[10px] truncate text-slate-600" data-open="${p.docId}">
+                                <span class="w-2 h-2 rounded-full inline-block" style="background:${hue};"></span>
+                                ${p.title}
+                            </div>`;
+                        }).join('')}
+                    `;
+                    grid.appendChild(cell);
+                }
+                grid.addEventListener('click', e => {
+                    const openBtn = e.target.closest('[data-open]');
+                    if (openBtn) { openParty(openBtn.getAttribute('data-open')); }
+                });
+            }
+
+            $('#toggleCalendar').onclick = () => {
+                const calBlock = $('#calendarBlock');
+                const sidebar = $('#sidebar');
+                if (calBlock.classList.contains('hidden')) {
+                    calBlock.classList.remove('hidden');
+                    sidebar.classList.add('hidden');
+                    $('#toggleCalendar').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar-off">
+                        <path d="M16 2v4"/><path d="M8 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M12 22V10"/><path d="M15.5 15.5H8"/><line x1="2" x2="22" y1="2" y2="22"/>
+                    </svg> Hide Calendar`;
+                    renderCalendar();
+                } else {
+                    calBlock.classList.add('hidden');
+                    sidebar.classList.remove('hidden');
+                    $('#toggleCalendar').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-calendar">
+                        <path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>
+                    </svg> Show Calendar`;
+                }
+            };
+            $('#calPrev').onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth() - 1, 1); renderCalendar(); };
+            $('#calNext').onclick = () => { calRef = new Date(calRef.getFullYear(), calRef.getMonth() + 1, 1); renderCalendar(); };
+
+            /* ===== Toolbar ===== */
+            $('#btnContacts').onclick = () => { renderContacts(); renderHouseholds(); openModal('#contactsModal'); };
+            $('#btnAddContact').onclick = () => { $('#contactForm').reset(); $('#cId').value = ''; $('#contactFormTitle').textContent = 'Add Contact'; openModal('#contactFormModal'); };
+            $('#btnHouseholds').onclick = () => { renderHouseholds(); openModal('#householdsModal'); };
+            
+            /* ===== Reset / Seed ===== */
+            $('#btnReset').onclick = async () => {
+                if (!confirm('Erase all data?')) return;
+                if (!db || !userId) { showMessage("App not ready.", "error"); return; }
+                const contacts = await Data.getPrivate('contacts');
+                const households = await Data.getPrivate('households');
+                const parties = await Data.getPrivate('parties');
+                
+                await Promise.all(contacts.map(c => Data.deletePrivate('contacts', c.docId)));
+                await Promise.all(households.map(h => Data.deletePrivate('households', h.docId)));
+                // Also delete public parties if the user is the host
+                await Promise.all(parties.filter(p => p.role === 'host').map(p => Data.deletePublicParty(p.publicId)));
+                await Promise.all(parties.map(p => Data.deletePrivate('parties', p.docId)));
+                
+                showMessage('All data erased.', 'success'); 
+            };
+
+            async function loadSampleData() {
+                const h1 = { name: 'Rivera Family' };
+                const h2 = { name: 'Lee Household' };
+                const savedHouseholds = await Data.savePrivate('households', [h1, h2]);
+                
+                const contacts = [
+                    { name: 'Alex Rivera', birthday: '2010-09-18', phone: '555-123-4567', email: 'alex@example.com', householdId: savedHouseholds[0].docId },
+                    { name: 'Priya Rivera', birthday: '1988-03-12', phone: '', email: '', householdId: savedHouseholds[0].docId },
+                    { name: 'Jordan Lee', birthday: '1989-10-05', phone: '555-987-1111', email: 'jordan@example.com', householdId: savedHouseholds[1].docId }
+                ];
+                const savedContacts = await Data.savePrivate('contacts', contacts);
+
+                const publicPartyId1 = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
+                const publicPartyId2 = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
+
+                const myParties = [
+                    {
+                        title: 'Alex Birthday', date: todayISO(), time: '18:00', role: 'host', forContactId: savedContacts[0].docId,
+                        publicId: publicPartyId1
+                    },
+                     {
+                        title: 'Jordan Cookout', date: '2025-08-20', time: '13:00', role: 'host', forContactId: savedContacts[2].docId,
+                        publicId: publicPartyId2
+                    }
+                ];
+                await Data.savePrivate('parties', myParties);
+
+                // Save public party data
+                await Data.savePublicParty(publicPartyId1, {
+                    title: 'Alex Birthday', date: todayISO(), time: '18:00', location: '123 Fun St', hostUserId: userId, guestCount: 8
+                });
+                await Data.savePublicParty(publicPartyId2, {
+                    title: 'Jordan Cookout', date: '2025-08-20', time: '13:00', location: 'Sunset Park', hostUserId: userId, guestCount: 0
+                });
+
+                // Add sample invitees to public party
+                await Data.addPublicSubItem(publicPartyId1, 'invitees', { contactId: savedContacts[0].docId, status: 'rsvp', gift: 'Lego set', thankYou: true });
+                await Data.addPublicSubItem(publicPartyId1, 'invitees', { contactId: savedContacts[1].docId, status: 'invited', gift: '', thankYou: false });
+                
+                // Add sample items to public party
+                await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Cake', qty: 1, cost: 35, assignedTo: savedContacts[1].docId, status: 'ordered' });
+                await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Plates', qty: 30, cost: 0.1, assignedTo: null, status: 'todo' });
+                await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Decorations', qty: 1, cost: 20, assignedTo: null, status: 'todo' });
+                
+                showMessage('Sample data loaded successfully!', 'success');
+            }
+            $('#btnSeed').onclick = async () => {
+                 if (!confirm('Load sample data? (Replaces current)')) return;
+                 if (!db || !userId) {
+                    showMessage("App not ready. Please try again.", "error");
+                    return;
+                }
+                const contacts = await Data.getPrivate('contacts');
+                const households = await Data.getPrivate('households');
+                const parties = await Data.getPrivate('parties');
+                
+                await Promise.all(contacts.map(c => Data.deletePrivate('contacts', c.docId)));
+                await Promise.all(households.map(h => Data.deletePrivate('households', h.docId)));
+                await Promise.all(parties.filter(p => p.role === 'host').map(p => Data.deletePublicParty(p.publicId)));
+                await Promise.all(parties.map(p => Data.deletePrivate('parties', p.docId)));
+                
+                await loadSampleData(); 
+            };
+
+            /* ===== Init ===== */
+            initFirebase();
+            
+        });
+    </script>
+</body>
+</html>
