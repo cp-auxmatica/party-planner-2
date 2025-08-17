@@ -20,6 +20,10 @@
         .modal-backdrop { backdrop-filter: blur(8px); }
         .modal-bg.show .modal-card { transform: scale(1); opacity: 1; }
         .modal-card { transform: scale(0.95); opacity: 0; transition: transform 0.3s ease-out, opacity 0.3s ease-out; }
+        
+        .editable { cursor: pointer; border-bottom: 1px dashed #e2e8f0; }
+        .editable:hover { border-bottom-style: solid; }
+        .editable.editing { border-bottom-style: solid; }
     </style>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -51,6 +55,13 @@
                         <path d="M5 12h14"/><path d="M12 5v14"/>
                     </svg>
                     Plan a Party
+                </button>
+                <button id="btnJoin" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm w-full sm:w-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-link">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07L9.44 10.6"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    Join a Party
                 </button>
             </div>
         </header>
@@ -235,6 +246,31 @@
             </div>
         </div>
     </div>
+
+    <!-- JOIN PARTY MODAL -->
+    <div id="joinPartyModal" class="modal-bg hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-30 modal-backdrop">
+        <div class="modal-card bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex-shrink-0 flex justify-between items-center p-4 -mx-4 -mt-4 sm:p-6 sm:-mx-6 sm:-mt-6 mb-4 border-b border-slate-200">
+                <h3 class="text-xl font-semibold">Join a Party</h3>
+                <button class="p-1 rounded-full text-slate-500 hover:bg-slate-100 transition-colors" data-close="#joinPartyModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x">
+                        <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <form id="joinPartyForm" class="flex-grow p-6 flex flex-col gap-4 overflow-y-auto hide-scrollbar">
+                <p class="text-sm text-slate-500">Enter the party share link or ID provided by the host.</p>
+                <div>
+                    <label for="joinLink" class="block text-sm font-medium text-slate-600 mb-1">Party Link or ID</label>
+                    <input id="joinLink" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="Paste the link here..."/>
+                </div>
+                <div class="flex gap-2 items-end mt-4">
+                    <button class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-white bg-slate-800 hover:bg-slate-900 transition-colors shadow-md" type="submit">Join</button>
+                    <button type="button" class="flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm" data-close="#joinPartyModal">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
     
     <!-- Message box container -->
     <div id="messageBoxContainer" class="fixed top-4 right-4 z-[60] space-y-2"></div>
@@ -245,7 +281,7 @@
             lucide.createIcons();
             
             // Firebase Globals
-            let db, auth, userId;
+            let db, auth, userId, myContactId;
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
             const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
             const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -469,23 +505,26 @@
                 state.contacts = await Data.getPrivate('contacts');
                 state.households = await Data.getPrivate('households');
                 state.myParties = await Data.getPrivate('parties');
+                // Create a contact for the current user if it doesn't exist
+                if (!state.contacts.find(c => c.userId === userId)) {
+                    const userContact = { name: 'You', userId: userId, birthday: null, phone: null, email: null, householdId: null };
+                    await Data.savePrivate('contacts', userContact);
+                }
                 renderParties();
                 renderCalendar();
-                // Check if we need to load sample data
-                if (state.contacts.length === 0 && state.households.length === 0 && state.myParties.length === 0) {
-                     loadSampleData();
-                }
             }
             
             function setupRealtimeListeners() {
                 if (!db || !userId) return;
-
                 const contactsRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/contacts`);
                 const partiesRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/parties`);
                 const householdsRef = firebase.collection(db, `artifacts/${appId}/users/${userId}/households`);
 
                 firebase.onSnapshot(contactsRef, (snapshot) => {
                     state.contacts = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                    // Find the contact ID for the current user
+                    const me = state.contacts.find(c => c.userId === userId);
+                    if (me) myContactId = me.docId;
                     renderContacts();
                     renderHouseholdSelects();
                     if (currentPartyId) openParty(currentPartyId);
@@ -621,7 +660,7 @@
                     card.className = 'bg-white p-4 rounded-lg shadow-sm border border-slate-200';
                     card.innerHTML = `
                         <div class="flex justify-between items-center mb-2">
-                            <div class="font-bold text-lg">${c.name}</div>
+                            <div class="font-bold text-lg">${c.name} ${c.userId === userId ? '<span class="text-xs font-normal text-slate-500">(You)</span>' : ''}</div>
                             <div class="flex gap-2">
                                 <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-sm text-sm" data-edit="${c.docId}">Edit</button>
                                 <button class="flex items-center justify-center gap-2 px-3 py-1 rounded-lg font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors shadow-md text-sm" data-del="${c.docId}">Delete</button>
@@ -822,36 +861,97 @@
             };
 
             $('#btnPlan').onclick = () => openModal('#createPlanModal');
+            $('#btnJoin').onclick = () => openModal('#joinPartyModal');
 
             $('#partyPlanForm').addEventListener('submit', async e => {
                 e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                button.disabled = true;
+
                 const newParty = {
                     title: $('#pTitle').value.trim(),
                     date: $('#pDate').value || null,
                     time: $('#pTime').value || null,
                     location: $('#pLocation').value.trim() || null,
                     role: 'host',
-                    forContactId: $('#pFor').value || null,
-                    attend: { giftPlan: '', notes: '' },
-                    invitation: null,
-                    guestCount: 0
+                    forContactId: $('#pFor').value || null
                 };
                 if (!newParty.title || !newParty.date) {
                     showMessage('Party name and date are required.', 'error');
+                    button.disabled = false;
                     return;
                 }
                 const publicId = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
                 newParty.publicId = publicId;
-                await Data.savePrivate('parties', newParty);
-                await Data.savePublicParty(publicId, {
-                    title: newParty.title,
-                    date: newParty.date,
-                    time: newParty.time,
-                    location: newParty.location,
-                    hostUserId: userId
-                });
-                closeModal('#createPlanModal');
-                showMessage('Party planned successfully!', 'success');
+
+                const privateSave = await Data.savePrivate('parties', newParty);
+                if (privateSave.length > 0) {
+                     await Data.savePublicParty(publicId, {
+                        title: newParty.title,
+                        date: newParty.date,
+                        time: newParty.time,
+                        location: newParty.location,
+                        hostUserId: userId,
+                        guestCount: 0
+                    });
+                    closeModal('#createPlanModal');
+                    showMessage('Party planned successfully!', 'success');
+                    form.reset();
+                } else {
+                    showMessage('Failed to save party.', 'error');
+                }
+                 button.disabled = false;
+            });
+            
+            $('#joinPartyForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                const form = e.target;
+                const button = form.querySelector('button[type="submit"]');
+                button.disabled = true;
+
+                const input = $('#joinLink').value.trim();
+                let partyId = input;
+                // If it's a full URL, extract the party ID
+                if (input.startsWith(window.location.origin)) {
+                    const urlParams = new URLSearchParams(input.split('?')[1]);
+                    partyId = urlParams.get('party');
+                }
+
+                if (!partyId) {
+                    showMessage("Invalid party link or ID.", "error");
+                    button.disabled = false;
+                    return;
+                }
+
+                const existing = state.myParties.find(p => p.publicId === partyId);
+                if (existing) {
+                    showMessage("You are already attending this party.", "info");
+                    closeModal('#joinPartyModal');
+                    button.disabled = false;
+                    return;
+                }
+
+                const publicParty = await Data.getPublicParty(partyId);
+                if (publicParty) {
+                     const newParty = {
+                        title: publicParty.title,
+                        date: publicParty.date,
+                        time: publicParty.time,
+                        location: publicParty.location,
+                        role: 'attend',
+                        forContactId: null,
+                        publicId: partyId,
+                        attend: { giftPlan: '', notes: '' }
+                    };
+                    await Data.savePrivate('parties', newParty);
+                    showMessage("You've joined a new party!", 'success');
+                    closeModal('#joinPartyModal');
+                    form.reset();
+                } else {
+                    showMessage("This party link is invalid or the party no longer exists.", 'error');
+                }
+                button.disabled = false;
             });
 
             $('#quickAddFromPlanner').onclick = () => {
@@ -976,6 +1076,17 @@
                                 <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Guests Confirmed<div class="text-lg font-bold" id="summaryConfirmed">0</div></div>
                                 <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Adults<div class="text-lg font-bold" id="cntAdults">0</div></div>
                                 <div class="bg-slate-100 rounded-lg p-3 text-center text-sm font-medium text-slate-600 shadow-sm">Kids<div class="text-lg font-bold" id="cntKids">0</div></div>
+                            </div>
+
+                            <!-- Party Details Edit -->
+                            <div class="bg-white rounded-xl shadow-md p-4 space-y-4">
+                                <h4 class="text-lg font-semibold text-slate-700">Edit Party Details</h4>
+                                <div class="space-y-2">
+                                    <div><label class="block text-sm font-medium text-slate-600 mb-1">Party Name</label><input data-field="title" value="${publicParty.title || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                    <div><label class="block text-sm font-medium text-slate-600 mb-1">Date</label><input type="date" data-field="date" value="${publicParty.date || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                    <div><label class="block text-sm font-medium text-slate-600 mb-1">Time</label><input type="time" data-field="time" value="${publicParty.time || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                    <div><label class="block text-sm font-medium text-slate-600 mb-1">Location</label><input data-field="location" value="${publicParty.location || ''}" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"/></div>
+                                </div>
                             </div>
 
                             <!-- Local Weather -->
@@ -1174,23 +1285,34 @@
                 };
                 $('#btnShareParty').onclick = () => {
                     const partyLink = `${window.location.origin}${window.location.pathname}?party=${myParty.publicId}`;
-                    navigator.clipboard.writeText(partyLink).then(() => {
-                        showMessage('Party link copied to clipboard!', 'success');
-                    }).catch(err => {
-                        console.error('Could not copy text: ', err);
-                        showMessage('Failed to copy link.', 'error');
-                    });
+                    // Use a temporary textarea to copy text to the clipboard
+                    const tempInput = document.createElement('textarea');
+                    tempInput.value = partyLink;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempInput);
+                    showMessage('Party link copied to clipboard!', 'success');
                 };
                 
                 if (myParty.role === 'host') {
                      // Host-specific listeners and rendering
-                    $('#guestCount').value = myParty.guestCount || (myParty.invitees?.length || 0);
+                    $('#guestCount').value = publicParty.guestCount || 0;
                     renderInvitees(myParty.invitees, myParty.publicId);
                     renderItems(myParty.items, myParty.publicId);
                     renderVendors(myParty.vendors, myParty.publicId);
                     renderInvitation(myParty.invitation, myParty.docId);
                     updateCountsAndLists(myParty);
                     renderChat(myParty.messages, myParty.publicId);
+
+                    // In-place editing for party details
+                    $$('[data-field]').forEach(input => {
+                        input.addEventListener('input', async () => {
+                            const field = input.dataset.field;
+                            const value = input.value;
+                            await Data.savePublicParty(myParty.publicId, { [field]: value });
+                        });
+                    });
 
                     $('#btnLoadWeather').onclick = async () => {
                         const weatherContent = $('#weatherContent');
@@ -1276,6 +1398,7 @@
 
             // Party details - HOST
             function updateCountsAndLists(myParty) {
+                const publicParty = state.publicParties[myParty.publicId];
                 const confirmed = (myParty.invitees || []).filter(i => i.status === 'rsvp');
                 const itemsToBuy = (myParty.items || []).filter(i => i.status !== 'picked').length;
                 const estimatedCost = (myParty.items || []).reduce((s, it) => s + (Number(it.cost) || 0) * (Number(it.qty) || 1), 0);
@@ -1283,8 +1406,8 @@
                 $('#summaryItems').textContent = itemsToBuy;
                 $('#summaryConfirmed').textContent = confirmed.length;
 
-                const confirmedKids = confirmed.filter(i => calcAgeBucket(i.contactId, myParty.publicParty.date).bucket === 'kid').length;
-                const confirmedAdults = confirmed.filter(i => calcAgeBucket(i.contactId, myParty.publicParty.date).bucket === 'adult').length;
+                const confirmedKids = confirmed.filter(i => calcAgeBucket(i.contactId, publicParty.date).bucket === 'kid').length;
+                const confirmedAdults = confirmed.filter(i => calcAgeBucket(i.contactId, publicParty.date).bucket === 'adult').length;
 
                 $('#cntKids').textContent = confirmedKids;
                 $('#cntAdults').textContent = confirmedAdults;
@@ -1302,7 +1425,7 @@
                 const tbody = $('#inviteeTableBody');
                 if (!tbody) return;
                 tbody.innerHTML = '';
-                (invitees || []).forEach((i, idx) => {
+                (invitees || []).forEach((i) => {
                     const c = state.contacts.find(c => c.docId === i.contactId);
                     const age = c?.birthday ? ageOnDate(c.birthday, state.publicParties[publicPartyId]?.date) : null;
                     const statusColors = { invited: 'bg-slate-600 text-white', rsvp: 'bg-green-600 text-white', declined: 'bg-red-600 text-white' };
@@ -1583,7 +1706,8 @@
              function renderAttendeeTasks(items) {
                  const container = $('#attendeeTasks');
                  if (!container) return;
-                 const myAssignedItems = items.filter(i => i.assignedTo === state.contacts.find(c => c.name === userId)?.docId); // This needs a proper way to identify the current user's contact ID
+                 
+                 const myAssignedItems = (items || []).filter(i => i.assignedTo === myContactId);
                  if (myAssignedItems.length === 0) {
                      container.innerHTML = `<div class="text-sm text-slate-500">No tasks assigned to you.</div>`;
                      return;
@@ -1631,7 +1755,7 @@
                  const text = chatInput.value.trim();
                  if (!myParty || !text) return;
 
-                 const myContact = state.contacts.find(c => c.docId === myParty.forContactId);
+                 const myContact = state.contacts.find(c => c.userId === userId);
                  const message = {
                      text,
                      userId: userId,
@@ -1729,16 +1853,32 @@
             };
 
             async function loadSampleData() {
+                if (!db || !userId) {
+                    showMessage("App not ready. Please try again.", "error");
+                    return;
+                }
+                // Manually remove all existing data first
+                const contacts = await Data.getPrivate('contacts');
+                const households = await Data.getPrivate('households');
+                const parties = await Data.getPrivate('parties');
+                await Promise.all(contacts.map(c => Data.deletePrivate('contacts', c.docId)));
+                await Promise.all(households.map(h => Data.deletePrivate('households', h.docId)));
+                await Promise.all(parties.filter(p => p.role === 'host').map(p => Data.deletePublicParty(p.publicId)));
+                await Promise.all(parties.map(p => Data.deletePrivate('parties', p.docId)));
+
+                const me = { name: 'You', userId: userId, birthday: null, phone: null, email: null, householdId: null };
+                const savedMe = (await Data.savePrivate('contacts', [me]))[0];
+                
                 const h1 = { name: 'Rivera Family' };
                 const h2 = { name: 'Lee Household' };
                 const savedHouseholds = await Data.savePrivate('households', [h1, h2]);
                 
-                const contacts = [
+                const contactsToSave = [
                     { name: 'Alex Rivera', birthday: '2010-09-18', phone: '555-123-4567', email: 'alex@example.com', householdId: savedHouseholds[0].docId },
                     { name: 'Priya Rivera', birthday: '1988-03-12', phone: '', email: '', householdId: savedHouseholds[0].docId },
                     { name: 'Jordan Lee', birthday: '1989-10-05', phone: '555-987-1111', email: 'jordan@example.com', householdId: savedHouseholds[1].docId }
                 ];
-                const savedContacts = await Data.savePrivate('contacts', contacts);
+                const savedContacts = await Data.savePrivate('contacts', contactsToSave);
 
                 const publicPartyId1 = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
                 const publicPartyId2 = firebase.doc(firebase.collection(db, `artifacts/${appId}/public/parties`)).id;
@@ -1769,27 +1909,14 @@
                 
                 // Add sample items to public party
                 await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Cake', qty: 1, cost: 35, assignedTo: savedContacts[1].docId, status: 'ordered' });
-                await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Plates', qty: 30, cost: 0.1, assignedTo: null, status: 'todo' });
+                await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Plates', qty: 30, cost: 0.1, assignedTo: savedMe.docId, status: 'todo' });
                 await Data.addPublicSubItem(publicPartyId1, 'items', { name: 'Decorations', qty: 1, cost: 20, assignedTo: null, status: 'todo' });
                 
                 showMessage('Sample data loaded successfully!', 'success');
             }
             $('#btnSeed').onclick = async () => {
                  if (!confirm('Load sample data? (Replaces current)')) return;
-                 if (!db || !userId) {
-                    showMessage("App not ready. Please try again.", "error");
-                    return;
-                }
-                const contacts = await Data.getPrivate('contacts');
-                const households = await Data.getPrivate('households');
-                const parties = await Data.getPrivate('parties');
-                
-                await Promise.all(contacts.map(c => Data.deletePrivate('contacts', c.docId)));
-                await Promise.all(households.map(h => Data.deletePrivate('households', h.docId)));
-                await Promise.all(parties.filter(p => p.role === 'host').map(p => Data.deletePublicParty(p.publicId)));
-                await Promise.all(parties.map(p => Data.deletePrivate('parties', p.docId)));
-                
-                await loadSampleData(); 
+                 await loadSampleData(); 
             };
 
             /* ===== Init ===== */
